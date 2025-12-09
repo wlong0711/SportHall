@@ -3,7 +3,19 @@ const User = require('../models/User');
 
 const auth = async (req, res, next) => {
   try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
+    const authHeader = req.header('Authorization');
+
+    if (!authHeader) {
+      return res.status(401).json({ message: 'No token, authorization denied' });
+    }
+
+    // Parse Authorization header: "Bearer <token>"
+    const parts = authHeader.split(' ');
+    if (parts.length !== 2 || parts[0] !== 'Bearer') {
+      return res.status(401).json({ message: 'Invalid authorization header format' });
+    }
+
+    const token = parts[1];
 
     if (!token) {
       return res.status(401).json({ message: 'No token, authorization denied' });

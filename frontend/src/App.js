@@ -1,6 +1,5 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import './App.css';
 
 // Context
 import { AuthProvider } from './context/AuthContext';
@@ -26,7 +25,7 @@ function App() {
   return (
     <AuthProvider>
       <Router>
-        <div className="App">
+        <div className="min-h-screen bg-slate-900">
           <Navbar />
           <Routes>
             <Route path="/" element={<Home />} />
