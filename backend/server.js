@@ -1,7 +1,7 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const connectDB = require('./config/db');
 
 // Load environment variables
 dotenv.config();
@@ -14,9 +14,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Database connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/sporthall')
-.then(() => console.log('MongoDB connected successfully'))
-.catch((err) => console.error('MongoDB connection error:', err));
+connectDB();
 
 // Routes
 app.get('/', (req, res) => {
@@ -29,16 +27,14 @@ app.use('/api/bookings', require('./routes/bookings'));
 app.use('/api/courts', require('./routes/courts'));
 app.use('/api/availability', require('./routes/availability'));
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Something went wrong!', error: err.message });
-});
-
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
+
+// Error handling middleware (must be last)
+const errorHandler = require('./middleware/errorHandler');
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
