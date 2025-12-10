@@ -12,13 +12,13 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
 import Book from './pages/Book';
 import BookDate from './pages/BookDate';
 import BookTime from './pages/BookTime';
 import BookCourt from './pages/BookCourt';
 import BookParticipants from './pages/BookParticipants';
 import Profile from './pages/Profile';
+import BookHistory from './pages/BookHistory';
 import Admin from './pages/Admin';
 
 function App() {
@@ -31,14 +31,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
+            {/* Dashboard removed — users are redirected to Home after login */}
             <Route
               path="/book"
               element={
@@ -84,6 +77,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Profile />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/bookings"
+              element={
+                <ProtectedRoute>
+                  <BookHistory />
                 </ProtectedRoute>
               }
             />
