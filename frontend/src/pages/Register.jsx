@@ -17,7 +17,7 @@ const Register = () => {
   // Redirect if already authenticated
   React.useEffect(() => {
     if (isAuthenticated) {
-      navigate('/dashboard');
+      navigate('/');
     }
   }, [isAuthenticated, navigate]);
 
@@ -64,7 +64,8 @@ const Register = () => {
       const { confirmPassword, ...userData } = formData;
       const result = await register(userData);
       if (result.success) {
-        navigate('/dashboard');
+        // After registering, send the user to the login page so they can sign in
+        navigate('/login');
       } else {
         setError(result.message || 'Registration failed. Please try again.');
       }
