@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { availabilityService, courtService, bookingService } from '../services/bookingService';
-import { generateTimeSlots, formatDate, getCurrentMonthDates } from '../utils/dateUtils';
+import { generateTimeSlots, formatDate, getCurrentMonthDates, isTimeSlotExpired } from '../utils/dateUtils';
 
 const Admin = () => {
   const { user } = useAuth();
@@ -69,6 +69,38 @@ const Admin = () => {
       setLoading(false);
     }
   };
+
+  // Classify bookings into ongoing / completed / cancelled for admin view
+  const classifyBookings = (list) => {
+    const ongoing = [];
+    const completed = [];
+    const cancelled = [];
+
+    (list || []).forEach((b) => {
+      if (b.status === 'cancelled') {
+        cancelled.push(b);
+      } else if (isTimeSlotExpired(b.date, b.timeSlot)) {
+        completed.push(b);
+      } else {
+        ongoing.push(b);
+      }
+    });
+
+    return { ongoing, completed, cancelled };
+  };
+
+  const { ongoing: ongoingBookings, completed: completedBookings, cancelled: cancelledBookings } = classifyBookings(bookings);
+  const [bookingViewTab, setBookingViewTab] = useState('ongoing');
+
+  // Helper: sort court lists using natural numeric ordering so names like
+  // "Court 2" come before "Court 10".
+  const sortByNameNumeric = (list) =>
+    [...list].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+    );
+
+  const badmintonCourts = sortByNameNumeric(courts.filter((c) => c.sport === 'badminton'));
+  const tableTennisCourts = sortByNameNumeric(courts.filter((c) => c.sport === 'table-tennis'));
 
   const handleSetAvailability = async (e) => {
     e.preventDefault();
@@ -290,12 +322,36 @@ const Admin = () => {
             </form>
 
             <h2 className="mt-8 mb-4 text-white text-xl font-semibold">Existing Courts</h2>
-            <div className="grid gap-4 mt-4">
-              {courts.map((court) => (
-                <div key={court._id} className="p-4 bg-slate-700 rounded-lg border-l-4 border-blue-500 border border-slate-600">
-                  <strong className="text-white">{court.name}</strong> <span className="text-slate-300">- {court.sport === 'badminton' ? '🏸 Badminton' : '🏓 Table Tennis'}</span>
-                </div>
-              ))}
+            <div className="grid md:grid-cols-2 gap-6 mt-4">
+              <div>
+                <h3 className="text-lg text-white font-semibold mb-3">Badminton Courts</h3>
+                {badmintonCourts.length === 0 ? (
+                  <p className="text-slate-400">No badminton courts.</p>
+                ) : (
+                  <div className="grid gap-4">
+                    {badmintonCourts.map((court) => (
+                      <div key={court._id} className="p-4 bg-slate-700 rounded-lg border-l-4 border-l-blue-500 border border-slate-600">
+                        <strong className="text-white">{court.name}</strong> <span className="text-slate-300">- 🏸 Badminton</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-lg text-white font-semibold mb-3">Table Tennis Courts</h3>
+                {tableTennisCourts.length === 0 ? (
+                  <p className="text-slate-400">No table tennis courts.</p>
+                ) : (
+                  <div className="grid gap-4">
+                    {tableTennisCourts.map((court) => (
+                      <div key={court._id} className="p-4 bg-slate-700 rounded-lg border-l-4 border-l-blue-500 border border-slate-600">
+                        <strong className="text-white">{court.name}</strong> <span className="text-slate-300">- 🏓 Table Tennis</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -321,12 +377,39 @@ const Admin = () => {
                 <option value="table-tennis">Table Tennis</option>
               </select>
             </div>
+            {/* Bookings sub-tabs: Ongoing / Completed / Cancelled */}
+            <div className="flex gap-4 mb-6 border-b border-slate-700">
+              <button
+                className={`px-4 py-2 bg-transparent border-none cursor-pointer text-sm transition-all ${
+                  bookingViewTab === 'ongoing' ? 'text-blue-400 font-semibold border-b-2 border-b-blue-500' : 'text-slate-400 hover:text-blue-400'
+                }`}
+                onClick={() => setBookingViewTab('ongoing')}
+              >
+                Ongoing ({ongoingBookings.length})
+              </button>
+              <button
+                className={`px-4 py-2 bg-transparent border-none cursor-pointer text-sm transition-all ${
+                  bookingViewTab === 'completed' ? 'text-blue-400 font-semibold border-b-2 border-b-blue-500' : 'text-slate-400 hover:text-blue-400'
+                }`}
+                onClick={() => setBookingViewTab('completed')}
+              >
+                Completed ({completedBookings.length})
+              </button>
+              <button
+                className={`px-4 py-2 bg-transparent border-none cursor-pointer text-sm transition-all ${
+                  bookingViewTab === 'cancelled' ? 'text-blue-400 font-semibold border-b-2 border-b-blue-500' : 'text-slate-400 hover:text-blue-400'
+                }`}
+                onClick={() => setBookingViewTab('cancelled')}
+              >
+                Cancelled ({cancelledBookings.length})
+              </button>
+            </div>
             {loading ? (
               <div className="text-slate-300">Loading bookings...</div>
             ) : (
               <div className="grid gap-4">
-                {bookings.map((booking) => (
-                  <div key={booking._id} className="p-6 bg-slate-700 rounded-lg border-l-4 border-blue-500 border border-slate-600">
+                {(bookingViewTab === 'ongoing' ? ongoingBookings : bookingViewTab === 'completed' ? completedBookings : cancelledBookings).map((booking) => (
+                  <div key={booking._id} className="p-6 bg-slate-700 rounded-lg border-l-4 border-l-blue-500 border border-slate-600">
                     <div className="my-2 text-white">
                       <strong>{booking.user?.name}</strong> <span className="text-slate-300">({booking.user?.email})</span>
                     </div>
