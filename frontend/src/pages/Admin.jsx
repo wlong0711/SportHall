@@ -80,6 +80,10 @@ const Admin = () => {
   const [closeDialogInfo, setCloseDialogInfo] = useState({ timeSlot: null, court: null });
   const [closeReason, setCloseReason] = useState('');
   const [closeProcessing, setCloseProcessing] = useState(false);
+  // dialog state for reopening a slot (confirmation)
+  const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
+  const [reopenDialogInfo, setReopenDialogInfo] = useState({ timeSlot: null, court: null, availabilityId: null });
+  const [reopenProcessing, setReopenProcessing] = useState(false);
 
   const getToday = () => new Date().toISOString().slice(0, 10);
 
@@ -236,14 +240,38 @@ const Admin = () => {
     }
   };
 
-  const handleReopenSlot = async (availabilityId) => {
+  // open confirmation dialog for reopen
+  const handleReopenSlot = (availabilityId, timeSlot, court) => {
+    setReopenDialogInfo({ availabilityId, timeSlot, court });
+    setReopenDialogOpen(true);
+  };
+
+  const performReopenSlot = async () => {
+    const { availabilityId, timeSlot, court } = reopenDialogInfo || {};
+    if (!availabilityId) return;
     try {
+      setReopenProcessing(true);
       await availabilityService.deleteAvailability(availabilityId);
+
+      // optimistic UI update: mark as available
+      setDayData((prev) => {
+        const next = { ...prev };
+        if (!next[timeSlot]) return next;
+        next[timeSlot] = { ...next[timeSlot] };
+        next[timeSlot][court._id] = { status: 'available', label: 'Open', id: null, reason: null, court };
+        return next;
+      });
+
       setSuccessMessage('Slot reopened');
       setTimeout(() => setSuccessMessage(''), 3000);
+      setReopenDialogOpen(false);
+      setReopenDialogInfo({ timeSlot: null, court: null, availabilityId: null });
+      // refresh canonical schedule
       fetchDaySchedule(selectedDate);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to reopen slot');
+    } finally {
+      setReopenProcessing(false);
     }
   };
 
@@ -437,7 +465,7 @@ const Admin = () => {
                           return (
                             <td key={court._id} className="px-3 py-2 border-b border-slate-700">
                               <button
-                                onClick={() => handleReopenSlot(cell.id)}
+                                onClick={() => handleReopenSlot(cell.id, slot, court)}
                                 className="w-full flex items-center justify-center px-3 py-2 h-9 rounded-md bg-slate-600 border border-slate-500 text-slate-100 text-sm"
                               >
                                 <div>Closed</div>
@@ -492,6 +520,32 @@ const Admin = () => {
                       className="px-3 py-2 bg-red-600 text-white rounded text-sm disabled:opacity-50"
                     >
                       {closeProcessing ? 'Closing...' : 'Confirm Close'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Reopen confirmation dialog */}
+            {reopenDialogOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/40" onClick={() => setReopenDialogOpen(false)} />
+                <div role="dialog" aria-modal="true" className="relative bg-slate-800 rounded-lg p-6 w-full max-w-md text-white z-60">
+                  <h3 className="text-lg font-semibold mb-2">Reopen slot?</h3>
+                  <p className="text-sm text-slate-300 mb-3">Are you sure you want to reopen {formatTimeSlot(reopenDialogInfo.timeSlot)} — {reopenDialogInfo.court?.name}?</p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setReopenDialogOpen(false)}
+                      className="px-3 py-2 bg-slate-600 rounded text-sm"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={performReopenSlot}
+                      disabled={reopenProcessing}
+                      className="px-3 py-2 bg-blue-600 text-white rounded text-sm disabled:opacity-50"
+                    >
+                      {reopenProcessing ? 'Opening...' : 'Confirm Reopen'}
                     </button>
                   </div>
                 </div>
