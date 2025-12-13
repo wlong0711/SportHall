@@ -142,15 +142,39 @@ const Admin = () => {
       });
 
       // apply availability overrides (closures)
+      // availability records may populate `court` (object) or store `court` as id; handle both.
       (availabilityData || []).forEach((av) => {
         const slot = av.timeSlot;
-        const cid = av.courtId;
-        if (!data[slot] || !data[slot][cid]) return;
-        if (av.isAvailable === false) {
-          data[slot][cid] = { status: 'closed', label: 'Closed', id: av._id, reason: av.reason || '' , court: data[slot][cid].court };
+        if (!data[slot]) return;
+
+        // determine court id if present
+        const cid = av.court?._id || av.courtId || av.court || null;
+
+        // If cid is null (availability applies to all courts for the sport), apply to matching courts
+        if (cid === null) {
+          // apply to every court that matches the availability sport (or all)
+          (courtsData || []).forEach((c) => {
+            if (av.sport && av.sport !== 'all' && c.sport !== av.sport) return;
+            if (!data[slot] || !data[slot][c._id]) {
+              // note: defensive - ensure key exists
+              if (!data[slot][c._id]) data[slot][c._id] = { status: 'available', label: 'Open', id: null, reason: null, court: c };
+            }
+            if (av.isAvailable === false) {
+              data[slot][c._id] = { status: 'closed', label: 'Closed', id: av._id, reason: av.reason || '', court: data[slot][c._id].court };
+            } else {
+              data[slot][c._id] = { status: 'available', label: 'Open', id: av._id, reason: av.reason || '', court: data[slot][c._id].court };
+            }
+          });
         } else {
-          // explicit open override
-          data[slot][cid] = { status: 'available', label: 'Open', id: av._id, reason: av.reason || '', court: data[slot][cid].court };
+          // specific court override
+          // cid might be an ObjectId string or populated object id — ensure we use the id string
+          const courtIdStr = typeof cid === 'object' && cid._id ? cid._id : cid;
+          if (!data[slot] || !data[slot][courtIdStr]) return;
+          if (av.isAvailable === false) {
+            data[slot][courtIdStr] = { status: 'closed', label: 'Closed', id: av._id, reason: av.reason || '', court: data[slot][courtIdStr].court };
+          } else {
+            data[slot][courtIdStr] = { status: 'available', label: 'Open', id: av._id, reason: av.reason || '', court: data[slot][courtIdStr].court };
+          }
         }
       });
 
@@ -188,11 +212,22 @@ const Admin = () => {
     if (!timeSlot || !court) return;
     try {
       setCloseProcessing(true);
-      await availabilityService.setAvailability({ date: selectedDate, timeSlot, sport: court.sport || 'all', courtId: court._id, isAvailable: false, reason: closeReason });
+      const res = await availabilityService.setAvailability({ date: selectedDate, timeSlot, sport: court.sport || 'all', courtId: court._id, isAvailable: false, reason: closeReason });
+
+      // optimistic UI update: mark the cell as closed immediately
+      setDayData((prev) => {
+        const next = { ...prev };
+        if (!next[timeSlot]) next[timeSlot] = {};
+        next[timeSlot] = { ...next[timeSlot] };
+        next[timeSlot][court._id] = { status: 'closed', label: 'Closed', id: res?._id || null, reason: closeReason || '', court };
+        return next;
+      });
+
       setSuccessMessage('Slot closed');
       setTimeout(() => setSuccessMessage(''), 3000);
       setCloseDialogOpen(false);
       setCloseReason('');
+      // refresh canonical schedule (in background)
       fetchDaySchedule(selectedDate);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to close slot');
