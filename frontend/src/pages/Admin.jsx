@@ -80,6 +80,10 @@ const Admin = () => {
   const [closeDialogInfo, setCloseDialogInfo] = useState({ timeSlot: null, court: null });
   const [closeReason, setCloseReason] = useState('');
   const [closeProcessing, setCloseProcessing] = useState(false);
+  // dialog state for reopening a slot (confirmation)
+  const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
+  const [reopenDialogInfo, setReopenDialogInfo] = useState({ timeSlot: null, court: null, availabilityId: null });
+  const [reopenProcessing, setReopenProcessing] = useState(false);
 
   const getToday = () => new Date().toISOString().slice(0, 10);
 
@@ -142,15 +146,39 @@ const Admin = () => {
       });
 
       // apply availability overrides (closures)
+      // availability records may populate `court` (object) or store `court` as id; handle both.
       (availabilityData || []).forEach((av) => {
         const slot = av.timeSlot;
-        const cid = av.courtId;
-        if (!data[slot] || !data[slot][cid]) return;
-        if (av.isAvailable === false) {
-          data[slot][cid] = { status: 'closed', label: 'Closed', id: av._id, reason: av.reason || '' , court: data[slot][cid].court };
+        if (!data[slot]) return;
+
+        // determine court id if present
+        const cid = av.court?._id || av.courtId || av.court || null;
+
+        // If cid is null (availability applies to all courts for the sport), apply to matching courts
+        if (cid === null) {
+          // apply to every court that matches the availability sport (or all)
+          (courtsData || []).forEach((c) => {
+            if (av.sport && av.sport !== 'all' && c.sport !== av.sport) return;
+            if (!data[slot] || !data[slot][c._id]) {
+              // note: defensive - ensure key exists
+              if (!data[slot][c._id]) data[slot][c._id] = { status: 'available', label: 'Open', id: null, reason: null, court: c };
+            }
+            if (av.isAvailable === false) {
+              data[slot][c._id] = { status: 'closed', label: 'Closed', id: av._id, reason: av.reason || '', court: data[slot][c._id].court };
+            } else {
+              data[slot][c._id] = { status: 'available', label: 'Open', id: av._id, reason: av.reason || '', court: data[slot][c._id].court };
+            }
+          });
         } else {
-          // explicit open override
-          data[slot][cid] = { status: 'available', label: 'Open', id: av._id, reason: av.reason || '', court: data[slot][cid].court };
+          // specific court override
+          // cid might be an ObjectId string or populated object id — ensure we use the id string
+          const courtIdStr = typeof cid === 'object' && cid._id ? cid._id : cid;
+          if (!data[slot] || !data[slot][courtIdStr]) return;
+          if (av.isAvailable === false) {
+            data[slot][courtIdStr] = { status: 'closed', label: 'Closed', id: av._id, reason: av.reason || '', court: data[slot][courtIdStr].court };
+          } else {
+            data[slot][courtIdStr] = { status: 'available', label: 'Open', id: av._id, reason: av.reason || '', court: data[slot][courtIdStr].court };
+          }
         }
       });
 
@@ -188,11 +216,22 @@ const Admin = () => {
     if (!timeSlot || !court) return;
     try {
       setCloseProcessing(true);
-      await availabilityService.setAvailability({ date: selectedDate, timeSlot, sport: court.sport || 'all', courtId: court._id, isAvailable: false, reason: closeReason });
+      const res = await availabilityService.setAvailability({ date: selectedDate, timeSlot, sport: court.sport || 'all', courtId: court._id, isAvailable: false, reason: closeReason });
+
+      // optimistic UI update: mark the cell as closed immediately
+      setDayData((prev) => {
+        const next = { ...prev };
+        if (!next[timeSlot]) next[timeSlot] = {};
+        next[timeSlot] = { ...next[timeSlot] };
+        next[timeSlot][court._id] = { status: 'closed', label: 'Closed', id: res?._id || null, reason: closeReason || '', court };
+        return next;
+      });
+
       setSuccessMessage('Slot closed');
       setTimeout(() => setSuccessMessage(''), 3000);
       setCloseDialogOpen(false);
       setCloseReason('');
+      // refresh canonical schedule (in background)
       fetchDaySchedule(selectedDate);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to close slot');
@@ -201,14 +240,38 @@ const Admin = () => {
     }
   };
 
-  const handleReopenSlot = async (availabilityId) => {
+  // open confirmation dialog for reopen
+  const handleReopenSlot = (availabilityId, timeSlot, court) => {
+    setReopenDialogInfo({ availabilityId, timeSlot, court });
+    setReopenDialogOpen(true);
+  };
+
+  const performReopenSlot = async () => {
+    const { availabilityId, timeSlot, court } = reopenDialogInfo || {};
+    if (!availabilityId) return;
     try {
+      setReopenProcessing(true);
       await availabilityService.deleteAvailability(availabilityId);
+
+      // optimistic UI update: mark as available
+      setDayData((prev) => {
+        const next = { ...prev };
+        if (!next[timeSlot]) return next;
+        next[timeSlot] = { ...next[timeSlot] };
+        next[timeSlot][court._id] = { status: 'available', label: 'Open', id: null, reason: null, court };
+        return next;
+      });
+
       setSuccessMessage('Slot reopened');
       setTimeout(() => setSuccessMessage(''), 3000);
+      setReopenDialogOpen(false);
+      setReopenDialogInfo({ timeSlot: null, court: null, availabilityId: null });
+      // refresh canonical schedule
       fetchDaySchedule(selectedDate);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to reopen slot');
+    } finally {
+      setReopenProcessing(false);
     }
   };
 
@@ -402,7 +465,7 @@ const Admin = () => {
                           return (
                             <td key={court._id} className="px-3 py-2 border-b border-slate-700">
                               <button
-                                onClick={() => handleReopenSlot(cell.id)}
+                                onClick={() => handleReopenSlot(cell.id, slot, court)}
                                 className="w-full flex items-center justify-center px-3 py-2 h-9 rounded-md bg-slate-600 border border-slate-500 text-slate-100 text-sm"
                               >
                                 <div>Closed</div>
@@ -457,6 +520,32 @@ const Admin = () => {
                       className="px-3 py-2 bg-red-600 text-white rounded text-sm disabled:opacity-50"
                     >
                       {closeProcessing ? 'Closing...' : 'Confirm Close'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Reopen confirmation dialog */}
+            {reopenDialogOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/40" onClick={() => setReopenDialogOpen(false)} />
+                <div role="dialog" aria-modal="true" className="relative bg-slate-800 rounded-lg p-6 w-full max-w-md text-white z-60">
+                  <h3 className="text-lg font-semibold mb-2">Reopen slot?</h3>
+                  <p className="text-sm text-slate-300 mb-3">Are you sure you want to reopen {formatTimeSlot(reopenDialogInfo.timeSlot)} — {reopenDialogInfo.court?.name}?</p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setReopenDialogOpen(false)}
+                      className="px-3 py-2 bg-slate-600 rounded text-sm"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={performReopenSlot}
+                      disabled={reopenProcessing}
+                      className="px-3 py-2 bg-blue-600 text-white rounded text-sm disabled:opacity-50"
+                    >
+                      {reopenProcessing ? 'Opening...' : 'Confirm Reopen'}
                     </button>
                   </div>
                 </div>
