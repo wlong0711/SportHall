@@ -75,22 +75,51 @@ const Admin = () => {
   const [dayData, setDayData] = useState({}); // { timeSlot: { [courtId]: { status, label, id, reason } } }
   const [dayLoading, setDayLoading] = useState(false);
   const [availabilitySport, setAvailabilitySport] = useState('badminton');
+  // dialog state for closing a slot
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [closeDialogInfo, setCloseDialogInfo] = useState({ timeSlot: null, court: null });
+  const [closeReason, setCloseReason] = useState('');
+  const [closeProcessing, setCloseProcessing] = useState(false);
 
   const getToday = () => new Date().toISOString().slice(0, 10);
 
   const handleDateChange = (val) => {
-    // ensure non-null date value
-    if (!val) setSelectedDate(getToday());
-    else setSelectedDate(val);
+    // ensure non-null date value and prevent selecting past dates
+    if (!val) {
+      setSelectedDate(getToday());
+      return;
+    }
+    const today = getToday();
+    if (val < today) {
+      // clamp to today
+      setSelectedDate(today);
+    } else {
+      setSelectedDate(val);
+    }
   };
 
   const handleDateBlur = (e) => {
-    if (!e.target.value) setSelectedDate(getToday());
+    const val = e.target.value;
+    if (!val) {
+      setSelectedDate(getToday());
+      return;
+    }
+    if (val < getToday()) {
+      setSelectedDate(getToday());
+    }
   };
 
   const fetchDaySchedule = async (date = selectedDate) => {
     try {
       setDayLoading(true);
+      // prevent loading past dates
+      const today = getToday();
+      if (date < today) {
+        // reset selected date to today and bail out
+        setSelectedDate(today);
+        setDayLoading(false);
+        return;
+      }
       // fetch courts, bookings for date, and availability overrides
       const [courtsData, bookingsData, availabilityData] = await Promise.all([
         courtService.getCourts(),
@@ -147,16 +176,28 @@ const Admin = () => {
     fetchDaySchedule(selectedDate);
   }, [selectedDate]);
 
-  const handleCloseSlot = async (timeSlot, court) => {
-    const reason = window.prompt('Reason for closing this slot? (optional)');
-    if (reason === null) return; // user cancelled prompt
+  // open the close-slot dialog (enter reason + confirm)
+  const handleCloseSlot = (timeSlot, court) => {
+    setCloseDialogInfo({ timeSlot, court });
+    setCloseReason('');
+    setCloseDialogOpen(true);
+  };
+
+  const performCloseSlot = async () => {
+    const { timeSlot, court } = closeDialogInfo || {};
+    if (!timeSlot || !court) return;
     try {
-      await availabilityService.setAvailability({ date: selectedDate, timeSlot, sport: court.sport || 'all', courtId: court._id, isAvailable: false, reason });
+      setCloseProcessing(true);
+      await availabilityService.setAvailability({ date: selectedDate, timeSlot, sport: court.sport || 'all', courtId: court._id, isAvailable: false, reason: closeReason });
       setSuccessMessage('Slot closed');
       setTimeout(() => setSuccessMessage(''), 3000);
+      setCloseDialogOpen(false);
+      setCloseReason('');
       fetchDaySchedule(selectedDate);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to close slot');
+    } finally {
+      setCloseProcessing(false);
     }
   };
 
@@ -308,16 +349,11 @@ const Admin = () => {
                 <input
                   type="date"
                   value={selectedDate}
+                  min={getToday()}
                   onChange={(e) => handleDateChange(e.target.value)}
                   onBlur={handleDateBlur}
                   className="px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm text-white focus:outline-none"
                 />
-                <button
-                  onClick={() => fetchDaySchedule(selectedDate)}
-                  className="px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-500"
-                >
-                  Refresh
-                </button>
               </div>
               <div className="text-sm text-slate-400">Click a cell to toggle Closed/Open. Booked cells are disabled.</div>
             </div>
@@ -393,6 +429,39 @@ const Admin = () => {
                 </tbody>
               </table>
             </div>
+
+            {/* Close-slot dialog */}
+            {closeDialogOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/40" onClick={() => setCloseDialogOpen(false)} />
+                <div role="dialog" aria-modal="true" className="relative bg-slate-800 rounded-lg p-6 w-full max-w-md text-white z-60">
+                  <h3 className="text-lg font-semibold mb-2">Close slot</h3>
+                  <p className="text-sm text-slate-300 mb-3">{formatTimeSlot(closeDialogInfo.timeSlot)} — {closeDialogInfo.court?.name}</p>
+                  <label className="block text-sm text-slate-300 mb-1">Reason (optional)</label>
+                  <input
+                    value={closeReason}
+                    onChange={(e) => setCloseReason(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded mb-4 text-white"
+                    placeholder="e.g., Maintenance"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setCloseDialogOpen(false)}
+                      className="px-3 py-2 bg-slate-600 rounded text-sm"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={performCloseSlot}
+                      disabled={closeProcessing}
+                      className="px-3 py-2 bg-red-600 text-white rounded text-sm disabled:opacity-50"
+                    >
+                      {closeProcessing ? 'Closing...' : 'Confirm Close'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="mt-4 flex items-center gap-4">
               <div className="flex items-center gap-2">
