@@ -4,7 +4,7 @@ import { bookingService } from '../services/bookingService';
 import { formatDateDisplay, formatTimeSlot, isTimeSlotExpired } from '../utils/dateUtils';
 
 const BookHistory = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -21,9 +21,17 @@ const BookHistory = () => {
   useEffect(() => {
     if (searchParams.get('bookingSuccess') === 'true') {
       setSuccessMessage('Booking created successfully!');
+      // Remove the query param immediately so a page refresh won't re-show the message.
+      try {
+        const params = new URLSearchParams(searchParams);
+        params.delete('bookingSuccess');
+        setSearchParams(params, { replace: true });
+      } catch (e) {
+        // ignore
+      }
+
       setTimeout(() => {
         setSuccessMessage('');
-        try { searchParams.delete('bookingSuccess'); } catch (e) { /* ignore */ }
       }, 5000);
     }
   }, [searchParams]);
@@ -46,10 +54,7 @@ const BookHistory = () => {
   }, []);
 
   const handleCancelBooking = async (bookingId) => {
-    if (!window.confirm('Are you sure you want to cancel this booking?')) {
-      return;
-    }
-
+    // keep for compatibility if called directly, but prefer using the modal
     try {
       await bookingService.cancelBooking(bookingId);
       // Update local state to mark the booking as cancelled so it appears
@@ -59,6 +64,28 @@ const BookHistory = () => {
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to cancel booking');
+    }
+  };
+
+  // Confirmation modal state for cancelling
+  const [confirmCancel, setConfirmCancel] = useState({ open: false, bookingId: null });
+
+  const openCancelModal = (bookingId) => setConfirmCancel({ open: true, bookingId });
+  const closeCancelModal = () => setConfirmCancel({ open: false, bookingId: null });
+
+  const performCancel = async () => {
+    const bookingId = confirmCancel.bookingId;
+    if (!bookingId) return closeCancelModal();
+
+    try {
+      await bookingService.cancelBooking(bookingId);
+      setBookings(prev => prev.map(b => b._id === bookingId ? { ...b, status: 'cancelled' } : b));
+      setSuccessMessage('Booking cancelled successfully');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to cancel booking');
+    } finally {
+      closeCancelModal();
     }
   };
 
@@ -148,7 +175,7 @@ const BookHistory = () => {
         {showCancel && (
           <button
             className="mt-4 px-6 py-3 bg-red-600 text-white rounded-lg cursor-pointer text-base hover:bg-red-500 transition-colors"
-            onClick={() => handleCancelBooking(booking._id)}
+            onClick={() => openCancelModal(booking._id)}
           >
             Cancel Booking
           </button>
@@ -252,6 +279,20 @@ const BookHistory = () => {
                     <div className="grid gap-6">{classified.cancelled.map(b => renderBookingCard(b, false))}</div>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Confirmation modal for cancelling a booking */}
+        {confirmCancel.open && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50" onClick={closeCancelModal} />
+            <div className="relative bg-slate-800 rounded-lg p-6 w-full max-w-md border border-slate-700">
+              <h3 className="text-lg text-white mb-2">Confirm cancellation</h3>
+              <p className="text-slate-300 mb-6">Are you sure you want to cancel this booking? This action cannot be undone.</p>
+              <div className="flex justify-end gap-3">
+                <button className="px-4 py-2 bg-slate-700 text-slate-200 rounded" onClick={closeCancelModal}>Close</button>
+                <button className="px-4 py-2 bg-red-600 text-white rounded" onClick={performCancel}>Confirm Cancel</button>
               </div>
             </div>
           </div>

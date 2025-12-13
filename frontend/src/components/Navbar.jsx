@@ -58,6 +58,11 @@ const Navbar = () => {
                 <Link to="/bookings" className="text-slate-200 no-underline hover:text-blue-400 transition-colors">
                   My Bookings
                 </Link>
+                {user?.role === 'admin' && (
+                  <Link to="/admin" className="text-slate-200 no-underline hover:text-blue-400 transition-colors">
+                    Admin
+                  </Link>
+                )}
               </>
             )}
           </div>
@@ -68,11 +73,6 @@ const Navbar = () => {
           <div className="flex gap-8">
             {isAuthenticated ? (
               <>
-                {user?.role === 'admin' && (
-                  <Link to="/admin" className="text-slate-200 no-underline hover:text-blue-400 transition-colors">
-                    Admin
-                  </Link>
-                )}
                 <div className="relative" ref={menuRef}>
                   <button
                     onClick={() => setMenuOpen(v => !v)}

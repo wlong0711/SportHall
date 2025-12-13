@@ -68,7 +68,7 @@ const BookParticipants = () => {
         timeSlot,
         participants: validParticipants,
       });
-      navigate('/profile?bookingSuccess=true');
+      navigate('/bookings?bookingSuccess=true');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create booking. Please try again.');
     } finally {
