@@ -241,3 +241,4 @@ npm test           # Run tests
 - Email notifications for bookings
 - Booking history and analytics
 - Calendar view for availability
+- Include Opening hours, Centre Layout, Rules and regulation
