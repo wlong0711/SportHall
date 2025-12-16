@@ -61,7 +61,16 @@ const bookingSchema = new mongoose.Schema(
 );
 
 // Index to prevent duplicate bookings (one sport + one court per day per user)
-bookingSchema.index({ user: 1, sport: 1, date: 1, court: 1 }, { unique: true });
+// bookingSchema.index({ user: 1, sport: 1, date: 1, court: 1 }, { unique: true });
+
+// Only enforce uniqueness if the booking status is 'confirmed'
+bookingSchema.index(
+  { user: 1, sport: 1, date: 1, court: 1 }, 
+  { 
+    unique: true, 
+    partialFilterExpression: { status: 'confirmed' } 
+  }
+);
 
 // Index for efficient queries
 bookingSchema.index({ date: 1, timeSlot: 1, court: 1 });
