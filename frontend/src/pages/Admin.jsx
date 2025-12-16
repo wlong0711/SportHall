@@ -182,8 +182,9 @@ const Admin = () => {
         }
       });
 
-      // apply bookings (booked takes precedence)
+      // apply bookings (booked takes precedence). Only treat confirmed bookings as booked.
       (bookingsData || []).forEach((b) => {
+        if (!b || b.status === 'cancelled') return; // skip cancelled bookings
         const slot = b.timeSlot;
         const cid = b.court?._id || b.courtId;
         if (!data[slot] || !data[slot][cid]) return;

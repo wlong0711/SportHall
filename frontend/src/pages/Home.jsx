@@ -20,7 +20,7 @@ const Home = () => {
               Book Now
             </Link>
             <Link 
-              to="/profile" 
+              to="/bookings" 
               className="px-8 py-4 bg-slate-700 text-white border-2 border-slate-600 rounded-lg no-underline inline-block font-bold text-lg transition-all hover:bg-slate-600 hover:-translate-y-0.5"
             >
               My Bookings
