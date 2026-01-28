@@ -4,9 +4,6 @@ export const authService = {
   register: async (userData) => {
     try {
       const response = await api.post('/auth/register', userData);
-      if (response.data.token) {
-        localStorage.setItem('token', response.data.token);
-      }
       return response.data;
     } catch (error) {
       throw error;
@@ -19,6 +16,15 @@ export const authService = {
       if (response.data.token) {
         localStorage.setItem('token', response.data.token);
       }
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  resendVerification: async (email) => {
+    try {
+      const response = await api.post('/auth/resend-verification', { email });
       return response.data;
     } catch (error) {
       throw error;
