@@ -43,7 +43,7 @@ const userSchema = new mongoose.Schema(
 );
 
 // Hash password before saving
-userSchema.pre('save', async function (next) {
+userSchema.pre('save', async function () {
   // 1. 如果密码没有被修改，直接 return 退出，不做任何事
   if (!this.isModified('password')) {
     return;

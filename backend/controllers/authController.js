@@ -127,6 +127,68 @@ exports.verifyEmail = async (req, res) => {
   }
 };
 
+// @desc    Resend verification email
+// @route   POST /api/auth/resend-verification
+// @access  Public
+exports.resendVerification = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Please provide an email' });
+    }
+
+    const user = await User.findOne({ email });
+
+    // 为了安全起见，即使用户不存在，我们通常也不直接告诉前端“查无此人”，
+    // 但为了开发方便，这里先明确返回 User not found。
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ message: 'This account is already verified. Please login.' });
+    }
+
+    // 1. 生成新的验证 Token
+    const verificationToken = crypto.randomBytes(20).toString('hex');
+
+    // 2. 更新用户数据
+    user.verificationToken = verificationToken;
+    user.verificationTokenExpire = Date.now() + 24 * 60 * 60 * 1000; // 重置为24小时有效
+
+    await user.save();
+
+    // 3. 发送邮件 (逻辑和 Register 里的一样)
+    const verifyUrl = `${req.protocol}://${req.get('host')}/api/auth/verifyemail/${verificationToken}`;
+    // 如果是前后端分离，记得用前端的 URL，例如:
+    // const verifyUrl = `http://localhost:3000/verify/${verificationToken}`;
+
+    const message = `Please click the link below to verify your email:\n\n${verifyUrl}`;
+
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: 'SportHall - Email Verification (Resend)',
+        message,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: `Verification email resent to ${user.email}.`
+      });
+    } catch (emailError) {
+      user.verificationToken = undefined;
+      user.verificationTokenExpire = undefined;
+      await user.save();
+      return res.status(500).json({ message: 'Email could not be sent' });
+    }
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @desc    Login user
 // @route   POST /api/auth/login
 // @access  Public
