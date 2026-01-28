@@ -47,8 +47,8 @@ export const AuthProvider = ({ children }) => {
   const register = async (userData) => {
     try {
       const response = await authService.register(userData);
-      setUser(response);
-      setIsAuthenticated(true);
+      // setUser(response);
+      // setIsAuthenticated(true);
       return { success: true, data: response };
     } catch (error) {
       return {
