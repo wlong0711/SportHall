@@ -84,7 +84,15 @@ exports.verifyEmail = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(400).json({ message: 'Invalid or expired token' });
+      // 验证失败时的简单 HTML 提示
+      return res.status(400).send(`
+        <html>
+          <body style="text-align: center; padding-top: 50px; font-family: sans-serif;">
+            <h1 style="color: red;">Verification Failed</h1>
+            <p>The link is invalid or has expired.</p>
+          </body>
+        </html>
+      `);
     }
 
     // 验证成功，更新状态
@@ -93,15 +101,29 @@ exports.verifyEmail = async (req, res) => {
     user.verificationTokenExpire = undefined;
     await user.save();
 
-    // 这里可以直接返回 token 让用户自动登录，或者让用户重新登录
-    res.status(200).json({
-      success: true,
-      message: 'Email verified successfully! You can now login.',
-      token: generateToken(user._id) // 可选：直接登录
-    });
+    res.status(200).send(`
+      <html>
+        <body style="text-align: center; padding-top: 50px; font-family: sans-serif;">
+          <h1 style="color: green;">Email Verified Successfully!</h1>
+          <p>Thank you, ${user.name}. Your account has been verified.</p>
+          <p>You can now close this window or log in to your account.</p>
+          
+          <a href="http://localhost:3000/login" style="
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;">
+            Go to Login
+          </a>
+        </body>
+      </html>
+    `);
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).send('Server Error');
   }
 };
 
