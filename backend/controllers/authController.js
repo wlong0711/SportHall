@@ -1,4 +1,5 @@
 const crypto = require('crypto'); // 引入 crypto 生成 token
+const { validationResult } = require('express-validator');
 const User = require('../models/User');
 const generateToken = require('../utils/generateToken');
 const sendEmail = require('../utils/sendEmail'); // 引入刚才写的工具
@@ -7,17 +8,14 @@ const sendEmail = require('../utils/sendEmail'); // 引入刚才写的工具
 // @route   POST /api/auth/register
 // @access  Public
 exports.register = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    // 如果有错误，返回 400 和具体错误信息
+    return res.status(400).json({ errors: errors.array() });
+  }
+
   try {
     const { name, email, password } = req.body;
-
-    // Validation
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Please provide all required fields' });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({ message: 'Password must be at least 6 characters long' });
-    }
 
     // Check if user exists
     const userExists = await User.findOne({ email });
@@ -193,13 +191,13 @@ exports.resendVerification = async (req, res) => {
 // @route   POST /api/auth/login
 // @access  Public
 exports.login = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
   try {
     const { email, password } = req.body;
-
-    // Validation
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Please provide email and password' });
-    }
 
     // Check for user email
     const user = await User.findOne({ email }).select('+password');
