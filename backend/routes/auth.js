@@ -7,7 +7,10 @@ const {
   login,
   getMe,
   verifyEmail,
-  resendVerification
+  resendVerification,
+  forgotPassword, 
+  resetPassword,
+  validateResetToken
 } = require('../controllers/authController');
 const auth = require('../middleware/auth');
 
@@ -36,6 +39,9 @@ router.post('/register', registerValidation, register);
 router.post('/login', loginLimiter, loginValidation, login);
 router.get('/verifyemail/:token', verifyEmail);
 router.post('/resend-verification', resendVerification)
+router.post('/forgotpassword', forgotPassword);
+router.get('/resetpassword/:resettoken', validateResetToken);
+router.put('/resetpassword/:resettoken', resetPassword);
 router.get('/me', auth, getMe);
 
 module.exports = router;

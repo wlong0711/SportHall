@@ -187,6 +187,120 @@ exports.resendVerification = async (req, res) => {
   }
 };
 
+// @desc    Forgot Password
+// @route   POST /api/auth/forgotpassword
+// @access  Public
+exports.forgotPassword = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // 1. 获取重置 Token (调用刚才在 Model 里写的方法)
+    const resetToken = user.getResetPasswordToken();
+
+    // 2. 保存到数据库 (注意：我们要关掉 validation，否则可能会报错说缺少 password 等)
+    await user.save({ validateBeforeSave: false });
+
+    // 3. 构造重置链接 (指向前端页面)
+    // 假设前端路由是 /resetpassword/:resetToken
+    // const resetUrl = `${req.protocol}://${req.get('host')}/api/auth/resetpassword/${resetToken}`;
+    // 如果是前后端分离，通常是前端地址:
+    const resetUrl = `${process.env.CLIENT_URL}/resetpassword/${resetToken}`;
+
+    const message = `You are receiving this email because you (or someone else) has requested the reset of a password. \n\n Please make a PUT request to: \n\n ${resetUrl}`;
+
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: 'SportHall - Password Reset Token',
+        message,
+      });
+
+      res.status(200).json({ success: true, data: 'Email sent' });
+    } catch (err) {
+      // 发送失败，清除字段
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpire = undefined;
+
+      await user.save({ validateBeforeSave: false });
+
+      return res.status(500).json({ message: 'Email could not be sent' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Check if reset token is valid (Get request)
+// @route   GET /api/auth/resetpassword/:resettoken
+// @access  Public
+exports.validateResetToken = async (req, res) => {
+  try {
+    const resetPasswordToken = crypto
+      .createHash('sha256')
+      .update(req.params.resettoken)
+      .digest('hex');
+
+    const user = await User.findOne({
+      resetPasswordToken,
+      resetPasswordExpire: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired token' });
+    }
+
+    res.status(200).json({ success: true, message: 'Token is valid' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Reset Password
+// @route   PUT /api/auth/resetpassword/:resettoken
+// @access  Public
+exports.resetPassword = async (req, res) => {
+  try {
+    // 1. 获取 URL 里的 token，并进行同样的哈希加密 (因为数据库里存的是哈希过的)
+    const resetPasswordToken = crypto
+      .createHash('sha256')
+      .update(req.params.resettoken)
+      .digest('hex');
+
+    // 2. 查找用户：Token 匹配 且 没有过期
+    const user = await User.findOne({
+      resetPasswordToken,
+      resetPasswordExpire: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid token' });
+    }
+
+    // 3. 设置新密码
+    user.password = req.body.password;
+    
+    // 4. 清除重置字段
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+
+    // 5. 保存 (中间件会自动加密新密码)
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password updated successfully! Please login with your new password.'
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @desc    Login user
 // @route   POST /api/auth/login
 // @access  Public

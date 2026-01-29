@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
@@ -36,6 +37,8 @@ const userSchema = new mongoose.Schema(
     },
     verificationToken: String, // 用于存储邮件里的验证码
     verificationTokenExpire: Date, // 验证码有效期
+    resetPasswordToken: String,
+    resetPasswordExpire: Date,
   },
   {
     timestamps: true,
@@ -57,6 +60,24 @@ userSchema.pre('save', async function () {
 // Compare password method
 userSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
+};
+
+userSchema.methods.getResetPasswordToken = function () {
+  // 1. 生成一个随机的 Token (原版)
+  const resetToken = crypto.randomBytes(20).toString('hex');
+
+  // 2. 将 Token 哈希加密后存入数据库 (this.resetPasswordToken)
+  // 这样数据库里存的是加密后的，更加安全
+  this.resetPasswordToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+
+  // 3. 设置过期时间 (10分钟)
+  this.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
+
+  // 4. 返回原版 Token (用于发邮件)
+  return resetToken;
 };
 
 module.exports = mongoose.model('User', userSchema);
