@@ -31,6 +31,34 @@ export const authService = {
     }
   },
 
+  forgotPassword: async (email) => {
+    try {
+      const response = await api.post('/auth/forgotpassword', { email });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  validateResetToken: async (resetToken) => {
+    try {
+      const response = await api.get(`/auth/resetpassword/${resetToken}`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  resetPassword: async (resetToken, password) => {
+    try {
+      const response = await api.put(`/auth/resetpassword/${resetToken}`, { password });
+      
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
   logout: () => {
     localStorage.removeItem('token');
   },

@@ -121,6 +121,16 @@ const Login = () => {
               className="w-full px-3 py-3 bg-slate-700 border border-slate-600 rounded text-base text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
           </div>
+
+          <div className="flex justify-end mb-4">
+            <Link 
+              to="/forgot-password" 
+              className="text-sm text-blue-400 hover:text-blue-300 hover:underline"
+            >
+              Forgot Password?
+            </Link>
+          </div>
+
           {error && (
             <div className="bg-red-900/50 text-red-200 px-3 py-3 rounded mb-4 border border-red-700">
               {error}

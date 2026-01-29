@@ -12,6 +12,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Book from './pages/Book';
 import BookDate from './pages/BookDate';
 import BookTime from './pages/BookTime';
@@ -31,7 +33,8 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            {/* Dashboard removed — users are redirected to Home after login */}
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/resetpassword/:resetToken" element={<ResetPassword />} />
             <Route
               path="/book"
               element={
