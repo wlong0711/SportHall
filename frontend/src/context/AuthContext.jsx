@@ -1,41 +1,48 @@
 import React, { createContext, useState, useEffect } from 'react';
 import { authService } from '../services/authService';
+import api from '../services/api';
 
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
+  
+  // 初始化检查
   useEffect(() => {
-    // Check if user is logged in on mount
     const checkAuth = async () => {
-      const token = localStorage.getItem('token');
-      if (token && authService.isAuthenticated()) {
-        try {
-          const userData = await authService.getCurrentUser();
-          setUser(userData);
-          setIsAuthenticated(true);
-        } catch (error) {
-          console.error('Auth check failed:', error);
-          authService.logout();
-          setUser(null);
-          setIsAuthenticated(false);
-        }
+      try {
+        // 尝试通过 Refresh Token 获取新的 Access Token
+        const { data } = await api.get('/auth/refresh');
+        
+        // 设置 Axios 默认头
+        api.defaults.headers.common['Authorization'] = `Bearer ${data.accessToken}`;
+        
+        // 获取用户信息
+        const userResponse = await api.get('/auth/me');
+        setUser(userResponse.data);
+      } catch (error) {
+        // 失败说明没登录 (Cookie 无效或过期)
+        setUser(null);
+        // 确保清除可能存在的旧 header
+        delete api.defaults.headers.common['Authorization'];
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     checkAuth();
   }, []);
 
-  const login = async (credentials) => {
+  const login = async (formData) => {
     try {
-      const userData = await authService.login(credentials);
-      setUser(userData);
-      setIsAuthenticated(true);
-      return { success: true, data: userData };
+      const data = await authService.login(formData);
+      
+      // 保存 Access Token 到 Axios 默认头
+      api.defaults.headers.common['Authorization'] = `Bearer ${data.accessToken}`;
+      
+      setUser(data); // data 里包含了 user 信息
+      return { success: true };
     } catch (error) {
       return {
         success: false,
@@ -47,8 +54,8 @@ export const AuthProvider = ({ children }) => {
   const register = async (userData) => {
     try {
       const response = await authService.register(userData);
-      // setUser(response);
-      // setIsAuthenticated(true);
+      // 注册通常不需要自动登录，或者取决于你的业务逻辑
+      // 这里保持你原本的逻辑，只返回成功
       return { success: true, data: response };
     } catch (error) {
       return {
@@ -58,21 +65,26 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    authService.logout();
-    setUser(null);
-    setIsAuthenticated(false);
+  const logout = async () => {
+    try {
+      await authService.logout();
+    } finally {
+      setUser(null);
+      delete api.defaults.headers.common['Authorization'];
+    }
   };
 
-  const value = {
-    user,
-    loading,
-    isAuthenticated,
-    login,
-    register,
-    logout,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  // 这里的 isAuthenticated 动态通过 !!user 计算，不需要 state
+  return (
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      isAuthenticated: !!user, 
+      login, 
+      register,
+      logout 
+    }}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
 };
-
