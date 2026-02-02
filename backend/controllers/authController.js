@@ -1,8 +1,9 @@
 const crypto = require('crypto'); // 引入 crypto 生成 token
 const { validationResult } = require('express-validator');
 const User = require('../models/User');
-const generateToken = require('../utils/generateToken');
+const { generateAccessToken, generateRefreshToken } = require('../utils/generateToken');
 const sendEmail = require('../utils/sendEmail'); // 引入刚才写的工具
+const jwt = require('jsonwebtoken'); // 需要用来验证 refresh token
 
 // @desc    Register a new user
 // @route   POST /api/auth/register
@@ -322,12 +323,28 @@ exports.login = async (req, res) => {
         return res.status(401).json({ message: 'Please verify your email first' });
       }
       
+      // 生成双 Token
+      const accessToken = generateAccessToken(user._id);
+      const refreshToken = generateRefreshToken(user._id);
+
+      // 保存 refresh token 到数据库 (支持多设备登录的话这里要是数组，现在先用单设备覆盖模式)
+      user.refreshToken = refreshToken;
+      await user.save({ validateBeforeSave: false });
+
+      // 设置 HttpOnly Cookie 存储 refresh token
+      res.cookie('refreshToken', refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production', // 仅在生产环境使用 HTTPS
+        sameSite: 'strict', // 防 CSRF
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7天
+      });
+
       res.json({
         _id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
-        token: generateToken(user._id),
+        accessToken,
       });
     } else {
       res.status(401).json({ message: 'Invalid email or password' });
@@ -335,6 +352,60 @@ exports.login = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+};
+
+// @desc    Refresh Access Token
+// @route   GET /api/auth/refresh
+// @access  Public (因为它通过 Cookie 验证)
+exports.refreshToken = async (req, res) => {
+  try {
+    // 1. 获取 Cookie
+    const cookies = req.cookies;
+    if (!cookies?.refreshToken) return res.status(401).json({ message: 'Unauthorized' });
+
+    const refreshToken = cookies.refreshToken;
+
+    // 2. 验证 Token 是否有效
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+
+    // 3. 查库对比 (看 Token 是否被吊销过)
+    const user = await User.findById(decoded.id).select('+refreshToken');
+    
+    if (!user || user.refreshToken !== refreshToken) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    // 4. 发放新的 Access Token
+    const accessToken = generateAccessToken(user._id);
+
+    res.json({ accessToken });
+  } catch (error) {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
+};
+
+// @desc    Logout user / Clear cookie
+// @route   POST /api/auth/logout
+exports.logout = async (req, res) => {
+  const cookies = req.cookies;
+  if (!cookies?.refreshToken) return res.sendStatus(204); // No content
+
+  // 清除数据库里的 token
+  const refreshToken = cookies.refreshToken;
+  const user = await User.findOne({ refreshToken });
+  if (user) {
+    user.refreshToken = '';
+    await user.save({ validateBeforeSave: false });
+  }
+
+  // 清除 Cookie
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+  });
+  
+  res.status(200).json({ message: 'Logged out successfully' });
 };
 
 // @desc    Get current user

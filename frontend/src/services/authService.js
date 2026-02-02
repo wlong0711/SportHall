@@ -13,9 +13,6 @@ export const authService = {
   login: async (credentials) => {
     try {
       const response = await api.post('/auth/login', credentials);
-      if (response.data.token) {
-        localStorage.setItem('token', response.data.token);
-      }
       return response.data;
     } catch (error) {
       throw error;
@@ -59,8 +56,12 @@ export const authService = {
     }
   },
 
-  logout: () => {
-    localStorage.removeItem('token');
+  logout: async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (error) {
+      throw error;
+    }
   },
 
   getCurrentUser: async () => {

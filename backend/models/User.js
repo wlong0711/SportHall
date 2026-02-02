@@ -39,6 +39,10 @@ const userSchema = new mongoose.Schema(
     verificationTokenExpire: Date, // 验证码有效期
     resetPasswordToken: String,
     resetPasswordExpire: Date,
+    refreshToken: {
+    type: String,
+    select: false // 默认不查出来
+    }
   },
   {
     timestamps: true,
